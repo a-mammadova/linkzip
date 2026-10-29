@@ -59,7 +59,7 @@ private static void handleClient(Socket socket) {
                 }
 
                 String key = generateShortKey();
-                urlMap.put(key, longUrl);
+                urlMap.putIfAbsent(key, longUrl);
                 String shortUrl = BASE_URL + key;
 
                 sendResponse(out, "HTTP/1.1 201 Created", shortUrl);
@@ -69,9 +69,9 @@ private static void handleClient(Socket socket) {
                 String longUrl = urlMap.get(key);
 
                 if (longUrl != null) {
-                    String redirectResponse = "HTTP/1.1 302 Found\r\n" +
-                            "Location: " + longUrl + "\r\n" +
-                            "Content-Length: 0\r\n\r\n";
+                    String redirectResponse = "HTTP/1.1 302 Found\n" +
+                            "Location: " + longUrl + "\n" +
+                            "Content-Length: 0\n\n";
                     out.write(redirectResponse.getBytes(StandardCharsets.UTF_8));
                     out.flush();
                 } else {
@@ -88,8 +88,8 @@ private static void handleClient(Socket socket) {
 }
 
 private static void sendResponse(OutputStream out, String status, String body) throws IOException {
-    String response = status + "\r\n" + "Content-Type: " + "text/plain" + "\r\n" +
-            "Content-Length: " + body.length() + "\r\n" + "\r\n" + body;
+    String response = status + "\n" + "Content-Type: " + "text/plain" + "\n" +
+            "Content-Length: " + body.length() + "\n" + "\n" + body;
     out.write(response.getBytes(StandardCharsets.UTF_8));
     out.flush();
 }
