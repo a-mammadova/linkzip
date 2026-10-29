@@ -1,7 +1,7 @@
 private static final int PORT = 8080;
 private static final String BASE_URL = "http://localhost:" + PORT + "/";
 
-private static final Map<String, String> urlMap = new HashMap<>();
+private static final Map<String, String> urlMap = new ConcurrentHashMap<>();
 private static final String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 private static final Random random = new Random();
 
