@@ -77,3 +77,13 @@ private static String generateKey() {
 
     return key.toString();
 }
+
+private static void sendResponse(OutputStream out, String statusCode, String body) throws IOException {
+    String contentType = "text/plain";
+    int contentLength = body.length();
+    String response = statusCode + "\nContent-Type: " + contentType + "\nContent-Length: " + contentLength
+            + "\n\n" + body;
+    out.write(response.getBytes(StandardCharsets.UTF_8));
+    out.flush();
+}
+
