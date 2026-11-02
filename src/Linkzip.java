@@ -1,103 +1,79 @@
 private static final int PORT = 8080;
 private static final String BASE_URL = "http://localhost:" + PORT + "/";
 
-private static final Map<String, String> urlMap = new ConcurrentHashMap<>();
-private static final String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+private static final Map<String, String> urls = new ConcurrentHashMap<>();
+private static final String alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 private static final Random random = new Random();
 
 void main() {
+
+    // closes socket auto
     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-        IO.println("linkzip started on " + BASE_URL);
+        System.out.println("linkzip on: " + BASE_URL);
 
         while (true) {
-            // accept incoming TCP socket connection
-            Socket clientSocket = serverSocket.accept();
-
-            // handle each request separately
+            Socket clientSocket = serverSocket.accept(); // accept tcp conn
             new Thread(() -> handleClient(clientSocket)).start();
         }
-    } catch (IOException e) {
-        System.err.println("server error: " + e.getMessage());
+
+    } catch(IOException e) {
+        System.err.println("server error, bro ->" + e.getMessage());
     }
 }
 
-private static void handleClient(Socket socket) {
+private static void handleClient(Socket socket) throws IOException {
     try (socket;
-         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-         OutputStream out = socket.getOutputStream()
+    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+    OutputStream out = socket.getOutputStream();
     ) {
         try {
-            // parse request
-            String request = in.readLine();
-            if (request == null || request.isEmpty()) {
-                return;
-            }
+            String request = reader.readLine();
+            if (request == null || request.isEmpty()) { return; }
 
-            String[] parts = request.split(" ");
-            String method = parts[0];
-            String path = parts[1];
+            System.out.println("just checking what is request ->\n" + request + "\n"); // DELETE
 
-            // find content-length
+            String[] requestParts = request.split(" "); // parsin request
+            String method = requestParts[0];
+            String path = requestParts[1];
+
+            System.out.printf("request: %s, path: %s\n", method, path); // DELETE
+
             int contentLength = 0;
             String header;
-            while (!(header = in.readLine()).isEmpty()) {
-                if (header.toLowerCase().startsWith("content-length:")) {
+
+            while ((header = reader.readLine()) != null && !header.isEmpty()) {
+                if (header.toLowerCase().startsWith("content-length")) {
+                    // 15 is where con-len finishes, we trim spaces that surround num and convert to int
                     contentLength = Integer.parseInt(header.substring(15).trim());
                 }
             }
 
-            // routes
-            if (method.equals("POST") && path.equals("/zip")) {
+            /*
+            char[] bodyChars = new char[contentLength];
+            int totalRead = 0;
 
-                char[] bodyChars = new char[contentLength];
-                in.read(bodyChars, 0, contentLength);
-                String longUrl = new String(bodyChars).trim();
+            while (totalRead < contentLength) {
+                int count = reader.read(bodyChars, totalRead, contentLength - totalRead);
 
-                if (longUrl.isEmpty()) {
-                    sendResponse(out, "HTTP/1.1 400 Bad Request", "missing url");
-                    return;
-                }
+                if (count == -1) { throw new IOException("unexpected end of request body");}
+                totalRead += count;
+            } */
 
-                String key = generateShortKey();
-                urlMap.putIfAbsent(key, longUrl);
-                String shortUrl = BASE_URL + key;
 
-                sendResponse(out, "HTTP/1.1 201 Created", shortUrl);
-
-            } else if (method.equals("GET") && path.length() == 7 && path.startsWith("/")) {
-                String key = path.substring(1); // just getting rid of the first '/'
-                String longUrl = urlMap.get(key);
-
-                if (longUrl != null) {
-                    String redirectResponse = "HTTP/1.1 302 Found\n" +
-                            "Location: " + longUrl + "\n" +
-                            "Content-Length: 0\n\n";
-                    out.write(redirectResponse.getBytes(StandardCharsets.UTF_8));
-                    out.flush();
-                } else {
-                    sendResponse(out, "HTTP/1.1 404 Not Found", "url not found");
-                }
-            } else {
-                sendResponse(out, "HTTP/1.1 404 Not Found", "use POST /zip or GET /{key}");
-            }
         } catch (Exception e) {
-            System.err.println("error handling client connection: " + e.getMessage());
+            System.err.println("some error in handleClient first catch -> " + e.getMessage());
         }
-    } catch (IOException ignored) {
+    } catch () {
+
     }
+
 }
 
-private static void sendResponse(OutputStream out, String status, String body) throws IOException {
-    String response = status + "\n" + "Content-Type: " + "text/plain" + "\n" +
-            "Content-Length: " + body.length() + "\n" + "\n" + body;
-    out.write(response.getBytes(StandardCharsets.UTF_8));
-    out.flush();
-}
-
-private static String generateShortKey() {
-    StringBuilder sb = new StringBuilder(6);
+private static String generateKey() {
+    StringBuilder key = new StringBuilder(6);
     for (int i = 0; i < 6; i++) {
-        sb.append(alphabet.charAt(random.nextInt(alphabet.length())));
+        key.append(alph.charAt(random.nextInt(alph.length())));
     }
-    return sb.toString();
+
+    return key.toString();
 }
