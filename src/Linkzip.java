@@ -113,9 +113,10 @@ private static String generateKey() {
 }
 
 private static void sendResponse(OutputStream out, String statusCode, String body) throws IOException {
+    String httpVersion = "HTTP/1.1 ";
     String contentType = "text/plain";
     int contentLength = body.length();
-    String response = statusCode + "\nContent-Type: " + contentType + "\nContent-Length: " + contentLength
+    String response = httpVersion + statusCode + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + contentLength
             + "\n\n" + body;
     out.write(response.getBytes(StandardCharsets.UTF_8));
     out.flush();
