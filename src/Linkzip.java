@@ -13,7 +13,13 @@ void main() {
 
         while (true) {
             Socket clientSocket = serverSocket.accept(); // accept tcp conn
-            new Thread(() -> handleClient(clientSocket)).start();
+            new Thread(() -> {
+                try {
+                    handleClient(clientSocket);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }).start();
         }
 
     } catch(IOException e) {
@@ -59,11 +65,39 @@ private static void handleClient(Socket socket) throws IOException {
                 totalRead += count;
             } */
 
+            if (method.equals("POST") && path.equals("/zip")) {
+                char[] bodyChars = new char[contentLength];
+                reader.read(bodyChars, 0, contentLength);
+                String longUrl = new String(bodyChars).trim();
 
+                if (longUrl.isEmpty()) {
+                    sendResponse(out, "400", "missing url");
+                    return;
+                }
+
+                String key = generateKey();
+                urls.putIfAbsent(key, longUrl);
+                String shortUrl = BASE_URL + key;
+
+                sendResponse(out, "201", "created");
+            } else if (method.equals("GET") && path.length() == 7 && path.startsWith("/")) {
+                String key = path.substring(1); // getting rid of /
+                String longUrl = urls.get(key);
+
+                if (longUrl != null) {
+                    String redirectResponse = "302 found\n" + "Location: " + longUrl;
+                    out.write(redirectResponse.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                } else {
+                    sendResponse(out, "404", "not found");
+                }
+            } else {
+                sendResponse(out, "404 not found", "use POST /zip or GET /{key}");
+            }
         } catch (Exception e) {
             System.err.println("some error in handleClient first catch -> " + e.getMessage());
         }
-    } catch () {
+    } catch (Exception _) {
 
     }
 
