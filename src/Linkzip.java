@@ -3,7 +3,6 @@ private static final String BASE_URL = "http://localhost:" + PORT + "/";
 
 private static final Map<String, String> urls = new ConcurrentHashMap<>();
 private static final String alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-private static final Random random = new Random();
 
 void main() {
 
@@ -71,15 +70,19 @@ private static void handleClient(Socket socket) throws IOException {
                 String longUrl = new String(bodyChars).trim();
 
                 if (longUrl.isEmpty()) {
-                    sendResponse(out, "400", "missing url");
+                    sendResponse(out, "400", "bad request", "missing url");
                     return;
                 }
 
-                String key = generateKey();
-                urls.putIfAbsent(key, longUrl);
-                String shortUrl = BASE_URL + key;
+                String key;
 
-                sendResponse(out, "201", "created");
+                do {
+                    key = generateKey();
+                } while (urls.putIfAbsent(key, longUrl) != null);
+
+                String shortUlr = BASE_URL + key;
+
+                sendResponse(out, "201", "Created", "created");
             } else if (method.equals("GET") && path.length() == 7 && path.startsWith("/")) {
                 String key = path.substring(1); // getting rid of /
                 String longUrl = urls.get(key);
@@ -89,10 +92,10 @@ private static void handleClient(Socket socket) throws IOException {
                     out.write(redirectResponse.getBytes(StandardCharsets.UTF_8));
                     out.flush();
                 } else {
-                    sendResponse(out, "404", "not found");
+                    sendResponse(out, "404", "not found", "");
                 }
             } else {
-                sendResponse(out, "404 not found", "use POST /zip or GET /{key}");
+                sendResponse(out, "404", "not found", "use POST /zip or GET /{key}");
             }
         } catch (Exception e) {
             System.err.println("some error in handleClient first catch -> " + e.getMessage());
@@ -100,25 +103,33 @@ private static void handleClient(Socket socket) throws IOException {
     } catch (Exception _) {
 
     }
-
 }
 
 private static String generateKey() {
     StringBuilder key = new StringBuilder(6);
     for (int i = 0; i < 6; i++) {
-        key.append(alph.charAt(random.nextInt(alph.length())));
+        // threadlocalrandom is better for concurrent stuff
+        int index = ThreadLocalRandom.current().nextInt(alph.length());
+        key.append(alph.charAt(index));
     }
 
     return key.toString();
 }
 
-private static void sendResponse(OutputStream out, String statusCode, String body) throws IOException {
+private static void sendResponse(OutputStream out, String statusCode, String reasonPhrase, String body) throws IOException {
     String httpVersion = "HTTP/1.1 ";
     String contentType = "text/plain";
-    int contentLength = body.length();
-    String response = httpVersion + statusCode + "\r\nContent-Type: " + contentType + "\r\nContent-Length: " + contentLength
-            + "\n\n" + body;
-    out.write(response.getBytes(StandardCharsets.UTF_8));
+    byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+    int contentLength = bodyBytes.length;
+
+    String responseHeaders = httpVersion + statusCode + " " + reasonPhrase +
+            "\r\nContent-Type: " + contentType + "; charset=UTF-8" +
+            "\r\nContent-Length: " + contentLength +
+            "\r\nConnection: close" +
+            "\r\n\r\n";
+
+    out.write(responseHeaders.getBytes(StandardCharsets.UTF_8));
+    out.write(bodyBytes);
     out.flush();
 }
 
