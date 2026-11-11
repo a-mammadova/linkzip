@@ -68,7 +68,7 @@ private static void handleClient(Socket socket) throws IOException {
             String path = requestParts[1];
             String httpVersion = requestParts[2];
 
-            if (!httpVersion.equals("HTTP/1.1")) {
+            if (!httpVersion.equalsIgnoreCase("http/1.1")) {
                 sendResponse(out, "505", "HTTP Version Not Supported", "");
                 return;
             }
