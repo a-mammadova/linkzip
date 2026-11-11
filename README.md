@@ -2,7 +2,7 @@
 linkzip is the most original idea ever (after calculator) -> url shotener... 
 it is a *tiny* project im developing to understand http and networking fundamentals better
 
-for now there's nothing fancy yet
+for now there's nothing fancy
 
 # stack
 - java (sockets)
