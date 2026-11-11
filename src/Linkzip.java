@@ -13,11 +13,8 @@ void main() {
         while (true) {
             Socket clientSocket = serverSocket.accept(); // accept tcp conn
             new Thread(() -> {
-                try {
-                    handleClient(clientSocket);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                try { handleClient(clientSocket);}
+                catch (IOException e) {throw new RuntimeException(e);}
             }).start();
         }
 
@@ -28,12 +25,11 @@ void main() {
 
 private static void handleClient(Socket socket) throws IOException {
     try (socket;
-    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    OutputStream out = socket.getOutputStream();
+         InputStream reader = socket.getInputStream();
+         OutputStream out = socket.getOutputStream();
     ) {
         try {
-            String request = reader.readLine();
-            if (request == null || request.isEmpty()) { return; }
+            String request = readHttpLine(reader);
 
             System.out.println("just checking what is request ->\n" + request + "\n"); // DELETE
 
@@ -46,28 +42,26 @@ private static void handleClient(Socket socket) throws IOException {
             int contentLength = 0;
             String header;
 
-            while ((header = reader.readLine()) != null && !header.isEmpty()) {
-                if (header.toLowerCase().startsWith("content-length")) {
-                    // 15 is where con-len finishes, we trim spaces that surround num and convert to int
-                    contentLength = Integer.parseInt(header.substring(15).trim());
+            while ((header = readHttpLine(reader)) != null && !header.isEmpty()) {
+
+                int separator = header.indexOf(":");
+
+                if (separator <= 0) {
+                    throw new IOException("malformed http request, missing ':'");
+                }
+
+                String headerName = header.substring(0, separator).trim();
+                String headerValue = header.substring(separator + 1).trim();
+
+                if (headerName.equalsIgnoreCase("Content-Length")) {
+                    contentLength = Integer.parseInt(headerValue);
                 }
             }
 
-            /*
-            char[] bodyChars = new char[contentLength];
-            int totalRead = 0;
-
-            while (totalRead < contentLength) {
-                int count = reader.read(bodyChars, totalRead, contentLength - totalRead);
-
-                if (count == -1) { throw new IOException("unexpected end of request body");}
-                totalRead += count;
-            } */
-
             if (method.equals("POST") && path.equals("/zip")) {
-                char[] bodyChars = new char[contentLength];
-                reader.read(bodyChars, 0, contentLength);
-                String longUrl = new String(bodyChars).trim();
+                byte[] bodyBytes = new byte[contentLength];
+                reader.read(bodyBytes, 0, contentLength);
+                String longUrl = new String(bodyBytes).trim();
 
                 if (longUrl.isEmpty()) {
                     sendResponse(out, "400", "bad request", "missing url");
@@ -75,11 +69,8 @@ private static void handleClient(Socket socket) throws IOException {
                 }
 
                 String key;
-
-                do {
-                    key = generateKey();
-                } while (urls.putIfAbsent(key, longUrl) != null);
-
+                do {key = generateKey();}
+                while (urls.putIfAbsent(key, longUrl) != null);
                 String shortUlr = BASE_URL + key;
 
                 sendResponse(out, "201", "Created", "created");
@@ -105,6 +96,26 @@ private static void handleClient(Socket socket) throws IOException {
     }
 }
 
+private static String readHttpLine(InputStream reader) throws IOException{
+    ByteArrayOutputStream line = new ByteArrayOutputStream();
+    int current;
+
+    while ((current = reader.read()) != -1) {
+        if (current == '\r') {
+            int next = reader.read();
+            if (next != '\n') {throw new IOException("where the hell is \\n");}
+            return line.toString(StandardCharsets.ISO_8859_1); // iso_8859_1 is suitable for reading http/1.1 headers
+        }
+
+        if (current == '\n') { throw new IOException("where the hell is \\r");}
+        line.write(current);
+        if (line.size() > 8192) {throw new IOException("what the hell have u written longer than 8192");}
+    }
+
+    if (line.size() == 0) {return null;}
+    throw new IOException("unexpected end of line");
+}
+
 private static String generateKey() {
     StringBuilder key = new StringBuilder(6);
     for (int i = 0; i < 6; i++) {
@@ -116,7 +127,11 @@ private static String generateKey() {
     return key.toString();
 }
 
-private static void sendResponse(OutputStream out, String statusCode, String reasonPhrase, String body) throws IOException {
+private static void sendResponse(OutputStream out,
+                                 String statusCode,
+                                 String reasonPhrase,
+                                 String body)
+        throws IOException {
     String httpVersion = "HTTP/1.1 ";
     String contentType = "text/plain";
     byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
