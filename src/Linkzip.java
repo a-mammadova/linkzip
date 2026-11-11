@@ -1,3 +1,10 @@
+// limits
+private static final int MAX_REQUEST_LINE_SIZE = 8192;
+private static final int MAX_HEADER_LINE_SIZE = 8192;
+private static final int MAX_HEADER_SIZE = 16384;
+private static final int MAX_BODY_SIZE = 8192;
+
+
 private static final int PORT = 8080;
 private static final String BASE_URL = "http://localhost:" + PORT + "/";
 
@@ -6,20 +13,29 @@ private static final String alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR
 
 void main() {
 
-    // closes socket auto
+    // try-w-res closes sources inside () auto
     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
         System.out.println("linkzip on: " + BASE_URL);
 
         while (true) {
             Socket clientSocket = serverSocket.accept(); // accept tcp conn
-            new Thread(() -> {
-                try { handleClient(clientSocket);}
-                catch (IOException e) {throw new RuntimeException(e);}
-            }).start();
+            new Thread(() -> handleClientSafely(clientSocket)).start();
         }
 
     } catch(IOException e) {
         System.err.println("server error, bro ->" + e.getMessage());
+    }
+}
+
+// method for main loop
+private static void handleClientSafely(Socket socket) {
+    try {
+        handleClient(socket);
+    } catch (IOException e) {
+        System.err.println("client i/o error: " + e.getMessage());
+    } catch (RuntimeException e) {
+        System.err.println("unexpected client error: " + e.getMessage());
+        e.printStackTrace();
     }
 }
 
@@ -29,20 +45,47 @@ private static void handleClient(Socket socket) throws IOException {
          OutputStream out = socket.getOutputStream();
     ) {
         try {
-            String request = readHttpLine(reader);
+
+            // read, parse incoming request
+            String request = readHttpLine(reader, MAX_REQUEST_LINE_SIZE);
 
             System.out.println("just checking what is request ->\n" + request + "\n"); // DELETE
 
-            String[] requestParts = request.split(" "); // parsin request
+            if (request == null || request.isEmpty()) {
+                sendResponse(out, "400", "Bad Request", "empty request");
+                return;
+            }
+
+            String[] requestParts = request.trim().split(" ", 3);
+
+            if (requestParts.length !=3 || requestParts[0].isEmpty() ||
+                    requestParts[1].isEmpty() || requestParts[2].isEmpty()) {
+                sendResponse(out, "400", "Bad Request", "malformed request");
+                return;
+            }
+
             String method = requestParts[0];
             String path = requestParts[1];
+            String httpVersion = requestParts[2];
+
+            if (!httpVersion.equals("HTTP/1.1")) {
+                sendResponse(out, "505", "HTTP Version Not Supported", "");
+                return;
+            }
+
+            if (!method.equalsIgnoreCase("get") && !method.equalsIgnoreCase("post")) {
+                sendResponse(out, "405", "Method Not Allowed",
+                        "unsupported method or some nonsense");
+                return;
+            }
 
             System.out.printf("request: %s, path: %s\n", method, path); // DELETE
 
+            // get content length
             int contentLength = 0;
             String header;
 
-            while ((header = readHttpLine(reader)) != null && !header.isEmpty()) {
+            while ((header = readHttpLine(reader, MAX_HEADER_LINE_SIZE)) != null && !header.isEmpty()) {
 
                 int separator = header.indexOf(":");
 
@@ -58,45 +101,53 @@ private static void handleClient(Socket socket) throws IOException {
                 }
             }
 
-            if (method.equals("POST") && path.equals("/zip")) {
-                byte[] bodyBytes = new byte[contentLength];
-                reader.read(bodyBytes, 0, contentLength);
-                String longUrl = new String(bodyBytes).trim();
+            // handle responses for methods
+            if (method.equalsIgnoreCase("POST") && path.equalsIgnoreCase("/zip")) {
+                byte[] bodyBytes = reader.readNBytes(contentLength);
+
+                if (bodyBytes.length != contentLength) {
+                    throw new IOException("unexpected end of line");
+                }
+
+                String longUrl = new String(bodyBytes, StandardCharsets.UTF_8);
 
                 if (longUrl.isEmpty()) {
-                    sendResponse(out, "400", "bad request", "missing url");
+                    sendResponse(out, "400", "Bad Request", "missing url");
+                    System.out.println();
                     return;
                 }
 
                 String key;
-                do {key = generateKey();}
+                do {
+                    key = generateKey();
+                }
                 while (urls.putIfAbsent(key, longUrl) != null);
                 String shortUlr = BASE_URL + key;
 
-                sendResponse(out, "201", "Created", "created");
-            } else if (method.equals("GET") && path.length() == 7 && path.startsWith("/")) {
+                sendResponse(out, "201", "Created", shortUlr);
+                System.out.println();
+            } else if (method.equalsIgnoreCase("GET") && path.length() == 7 && path.startsWith("/")) {
                 String key = path.substring(1); // getting rid of /
                 String longUrl = urls.get(key);
 
                 if (longUrl != null) {
-                    String redirectResponse = "302 found\n" + "Location: " + longUrl;
-                    out.write(redirectResponse.getBytes(StandardCharsets.UTF_8));
-                    out.flush();
+                    sendRedirect(out, longUrl);
+                    System.out.println();
                 } else {
                     sendResponse(out, "404", "not found", "");
+                    System.out.println();
                 }
             } else {
                 sendResponse(out, "404", "not found", "use POST /zip or GET /{key}");
+                System.out.println();
             }
-        } catch (Exception e) {
-            System.err.println("some error in handleClient first catch -> " + e.getMessage());
+        } catch (IOException | NumberFormatException e) {
+            throw new RuntimeException(e);
         }
-    } catch (Exception _) {
-
     }
 }
 
-private static String readHttpLine(InputStream reader) throws IOException{
+private static String readHttpLine(InputStream reader, int maxBytes) throws IOException{
     ByteArrayOutputStream line = new ByteArrayOutputStream();
     int current;
 
@@ -109,7 +160,7 @@ private static String readHttpLine(InputStream reader) throws IOException{
 
         if (current == '\n') { throw new IOException("where the hell is \\r");}
         line.write(current);
-        if (line.size() > 8192) {throw new IOException("what the hell have u written longer than 8192");}
+        if (line.size() >= maxBytes) {throw new IOException("what the hell have u written longer than 8192");}
     }
 
     if (line.size() == 0) {return null;}
@@ -132,12 +183,11 @@ private static void sendResponse(OutputStream out,
                                  String reasonPhrase,
                                  String body)
         throws IOException {
-    String httpVersion = "HTTP/1.1 ";
     String contentType = "text/plain";
     byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
     int contentLength = bodyBytes.length;
 
-    String responseHeaders = httpVersion + statusCode + " " + reasonPhrase +
+    String responseHeaders = "HTTP/1.1 " + statusCode + " " + reasonPhrase +
             "\r\nContent-Type: " + contentType + "; charset=UTF-8" +
             "\r\nContent-Length: " + contentLength +
             "\r\nConnection: close" +
@@ -148,3 +198,13 @@ private static void sendResponse(OutputStream out,
     out.flush();
 }
 
+private static void sendRedirect(OutputStream out, String location) throws IOException{
+
+    String response = "HTTP/1.1 302 Found\r\n" +
+            "Location: " + location + "\r\n" +
+            "Content-Length: 0\r\n" +
+            "Connection: close\r\n\r\n";
+
+    out.write(response.getBytes(StandardCharsets.UTF_8));
+    out.flush();
+}
