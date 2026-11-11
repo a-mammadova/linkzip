@@ -33,4 +33,4 @@ java -cp out Linkzip
 curl -X POST http://localhost:8080/zip -d "https://www.reddit.com/r/TheMachineLearning/s/3FeFqj7nFz"
 ```
 
-note: not recommended for production use. 
+*note*: not recommended for production use. 
