@@ -26,7 +26,7 @@ javac -d out src/*.java
 
 3. run
 ```
-java -cp out Main
+java -cp out Linkzip
 ```
 4. try it
 ```
