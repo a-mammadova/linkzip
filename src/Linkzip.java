@@ -136,7 +136,7 @@ public  class Linkzip {
                     while (urls.putIfAbsent(key, longUrl) != null);
                     String shortUlr = BASE_URL + key;
 
-                    sendResponse(out, "201", "Created", shortUlr);
+                    sendResponse(out, "201", "Created", shortUlr + "\n");
                     System.out.println();
                 } else if (method.equalsIgnoreCase("GET") && path.length() == 7 && path.startsWith("/")) {
                     String key = path.substring(1); // getting rid of /
