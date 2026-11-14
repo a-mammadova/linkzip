@@ -68,7 +68,7 @@ public  class Linkzip {
                     return;
                 }
 
-                String[] requestParts = request.trim().split(" ", 3);
+                String[] requestParts = request.trim().split(" +", 3);
 
                 if (requestParts.length !=3 || requestParts[0].isEmpty() ||
                         requestParts[1].isEmpty() || requestParts[2].isEmpty()) {
@@ -108,6 +108,12 @@ public  class Linkzip {
                     String headerName = header.substring(0, separator).trim();
                     String headerValue = header.substring(separator + 1).trim();
 
+                    if (headerName.equalsIgnoreCase("Transfer-Encoding")) {
+                        sendResponse(out, "501", "Not Implemented",
+                                "transfer-encoding not supported yer");
+                        return;
+                    }
+
                     if (headerName.equalsIgnoreCase("Content-Length")) {
                         contentLength = Integer.parseInt(headerValue);
                     }
@@ -136,7 +142,7 @@ public  class Linkzip {
                     while (urls.putIfAbsent(key, longUrl) != null);
                     String shortUlr = BASE_URL + key;
 
-                    sendResponse(out, "201", "Created", shortUlr + "\n");
+                    sendResponse(out, "201", "Created", shortUlr);
                     System.out.println();
                 } else if (method.equalsIgnoreCase("GET") && path.length() == 7 && path.startsWith("/")) {
                     String key = path.substring(1); // getting rid of /
@@ -147,11 +153,9 @@ public  class Linkzip {
                         System.out.println();
                     } else {
                         sendResponse(out, "404", "not found", "");
-                        System.out.println();
                     }
                 } else {
                     sendResponse(out, "404", "not found", "use POST /zip or GET /{key}");
-                    System.out.println();
                 }
             } catch (IOException | NumberFormatException e) {
                 throw new RuntimeException(e);
@@ -171,8 +175,9 @@ public  class Linkzip {
             }
 
             if (current == '\n') { throw new IOException("where the hell is \\r");}
-            line.write(current);
+
             if (line.size() >= maxBytes) {throw new IOException("what the hell have u written longer than 8192");}
+            line.write(current);
         }
 
         if (line.size() == 0) {return null;}
@@ -195,18 +200,18 @@ public  class Linkzip {
                                      String reasonPhrase,
                                      String body)
             throws IOException {
-        String contentType = "text/plain";
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
         int contentLength = bodyBytes.length;
 
         String responseHeaders = "HTTP/1.1 " + statusCode + " " + reasonPhrase +
-                "\r\nContent-Type: " + contentType + "; charset=UTF-8" +
+                "\r\nContent-Type: text/plain; charset=UTF-8" +
                 "\r\nContent-Length: " + contentLength +
                 "\r\nConnection: close" +
                 "\r\n\r\n";
 
         out.write(responseHeaders.getBytes(StandardCharsets.UTF_8));
         out.write(bodyBytes);
+        //out.write(0x0A); // \n, btw...
         out.flush();
     }
 

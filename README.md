@@ -30,7 +30,7 @@ java -cp out Linkzip
 ```
 4. try it
 ```
-curl -X POST http://localhost:8080/zip -d "https://www.reddit.com/r/TheMachineLearning/s/3FeFqj7nFz"
+curl -X POST http://localhost:8080/zip -d "https://www.reddit.com/r/TheMachineLearning/s/3FeFqj7nFz -w '\n'"
 ```
 
 *note*: not recommended for production use. 
